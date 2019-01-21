@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #+
-# My first Nagios plugin -- check free memory.
+# My second Nagios plugin -- check swap space.
 #-
 
 import argparse
@@ -27,7 +27,7 @@ def load_meminfo() :
         result
 #end load_meminfo
 
-class Memfree(nagiosplugin.Resource) :
+class Swapfree(nagiosplugin.Resource) :
 
     def probe(self) :
         meminfo = load_meminfo()
@@ -41,17 +41,17 @@ class Memfree(nagiosplugin.Resource) :
               )
             for j, k in
                 (
-                    ("MemTotal", "MemAvailable"),
+                    ("SwapTotal", "SwapFree"),
                 )
           )
         return \
             metrics
     #end probe
 
-#end Memfree
+#end Swapfree
 
 def main() :
-    parser = argparse.ArgumentParser(description = "check free memory")
+    parser = argparse.ArgumentParser(description = "check free swap space")
     for shortopt, longopt, kwargs in \
         (
             (
@@ -59,7 +59,7 @@ def main() :
                 {
                     "metavar" : "RANGE",
                     "default" : 10,
-                    "help" : "warn if percentage of available memory falls below this",
+                    "help" : "warn if percentage of available swap falls below this",
                 },
             ),
             (
@@ -67,7 +67,7 @@ def main() :
                 {
                     "metavar" : "RANGE",
                     "default" : 5,
-                    "help" : "critical if percentage of available memory falls below this",
+                    "help" : "critical if percentage of available swap falls below this",
                 },
             ),
             (
@@ -85,8 +85,8 @@ def main() :
     args = parser.parse_args()
     nagiosplugin.Check \
       (
-        Memfree(),
-        nagiosplugin.ScalarContext("MemAvailable", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        Swapfree(),
+        nagiosplugin.ScalarContext("SwapFree", "@%d" % int(args.warning), "@%d" % int(args.critical)),
         nagiosplugin.Summary()
       ).main(verbose = args.verbose)
 #end main
