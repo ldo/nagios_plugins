@@ -32,7 +32,6 @@ class Memfree(nagiosplugin.Resource) :
 
     def probe(self) :
         meminfo = load_meminfo()
-        sys.stderr.write("meminfo = %s\n" % repr(meminfo)) # debug
         metrics = list \
           (
             nagiosplugin.Metric
