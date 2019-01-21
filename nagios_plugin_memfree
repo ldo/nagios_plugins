@@ -1,0 +1,100 @@
+#!/usr/bin/python3
+#+
+# My first Nagios plugin -- check free memory.
+#-
+
+import sys
+import argparse
+import nagiosplugin
+
+def load_meminfo() :
+    "reads the contents of /proc/meminfo and returns a dict of the items found."
+    result = {}
+    for line in open("/proc/meminfo", "r") :
+        items = line.split(":", 1)
+        if len(items) == 2 :
+            keyword, value = tuple(i.strip() for i in items)
+            value = value.split(" ", 1)
+            if len(value) > 1 :
+                value, units = value
+                assert units == "kB" # can’t handle anything else for now
+            else :
+                value = value[0]
+            #end if
+            result[keyword] = int(value)
+        #end if
+    #end line
+    return \
+        result
+#end load_meminfo
+
+class Memfree(nagiosplugin.Resource) :
+
+    def probe(self) :
+        meminfo = load_meminfo()
+        sys.stderr.write("meminfo = %s\n" % repr(meminfo)) # debug
+        metrics = list \
+          (
+            nagiosplugin.Metric
+              (
+                name = k,
+                value = round(100 * meminfo[k] / meminfo[j]),
+                uom = "%"
+              )
+            for j, k in
+                (
+                    ("MemTotal", "MemAvailable"),
+                    ("SwapTotal", "SwapFree"),
+                )
+          )
+        return \
+            metrics
+    #end probe
+
+#end Memfree
+
+def main() :
+    parser = argparse.ArgumentParser(description = "check free memory")
+    for shortopt, longopt, kwargs in \
+        (
+            (
+                "-w", "--warning",
+                {
+                    "metavar" : "RANGE",
+                    "default" : "",
+                    "help" : "warn if TBD",
+                },
+            ),
+            (
+                "-c", "--critical",
+                {
+                    "metavar" : "RANGE",
+                    "default" : "",
+                    "help" : "critical if TBD",
+                },
+            ),
+            (
+                "-v", "--verbose",
+                {
+                    "action" : "count",
+                    "default" : 0,
+                    "help" : "increase output verbosity",
+                },
+            ),
+        ) \
+    :
+        parser.add_argument(shortopt, longopt, **kwargs)
+    #end for
+    args = parser.parse_args()
+    nagiosplugin.Check \
+      (
+        Memfree(),
+        nagiosplugin.ScalarContext("MemAvailable", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.ScalarContext("SwapFree", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.Summary()
+      ).main(verbose = args.verbose)
+#end main
+
+if __name__ == "__main__" :
+    main()
+#end if
