@@ -35,13 +35,15 @@ class Memfree(nagiosplugin.Resource) :
           (
             nagiosplugin.Metric
               (
-                name = k,
-                value = round(100 * meminfo[k] / meminfo[j]),
-                uom = "%"
+                name = name,
+                value = value,
+                uom = units
               )
-            for j, k in
+            for name, value, units in
                 (
-                    ("MemTotal", "MemAvailable"),
+                    ("%avail", round(100 * meminfo["MemAvailable"] / meminfo["MemTotal"]), "%"),
+                    ("avail", meminfo["MemAvailable"], "kB"),
+                    ("total", meminfo["MemTotal"], "kB"),
                 )
           )
         return \
@@ -86,7 +88,9 @@ def main() :
     nagiosplugin.Check \
       (
         Memfree(),
-        nagiosplugin.ScalarContext("MemAvailable", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.ScalarContext("%avail", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.ScalarContext("avail"),
+        nagiosplugin.ScalarContext("total"),
         nagiosplugin.Summary()
       ).main(verbose = args.verbose)
 #end main

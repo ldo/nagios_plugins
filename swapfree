@@ -35,13 +35,15 @@ class Swapfree(nagiosplugin.Resource) :
           (
             nagiosplugin.Metric
               (
-                name = k,
-                value = round(100 * meminfo[k] / meminfo[j]),
-                uom = "%"
+                name = name,
+                value = value,
+                uom = units
               )
-            for j, k in
+            for name, value, units in
                 (
-                    ("SwapTotal", "SwapFree"),
+                    ("%avail", round(100 * meminfo["SwapFree"] / meminfo["SwapTotal"]), "%"),
+                    ("avail", meminfo["SwapFree"], "kB"),
+                    ("total", meminfo["SwapTotal"], "kB"),
                 )
           )
         return \
@@ -86,7 +88,9 @@ def main() :
     nagiosplugin.Check \
       (
         Swapfree(),
-        nagiosplugin.ScalarContext("SwapFree", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.ScalarContext("%avail", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.ScalarContext("avail"),
+        nagiosplugin.ScalarContext("total"),
         nagiosplugin.Summary()
       ).main(verbose = args.verbose)
 #end main
