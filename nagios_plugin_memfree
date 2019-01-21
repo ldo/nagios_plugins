@@ -61,16 +61,16 @@ def main() :
                 "-w", "--warning",
                 {
                     "metavar" : "RANGE",
-                    "default" : "",
-                    "help" : "warn if TBD",
+                    "default" : 10,
+                    "help" : "warn if percentage of available memory falls below this",
                 },
             ),
             (
                 "-c", "--critical",
                 {
                     "metavar" : "RANGE",
-                    "default" : "",
-                    "help" : "critical if TBD",
+                    "default" : 5,
+                    "help" : "critical if percentage of available memory falls below this",
                 },
             ),
             (
