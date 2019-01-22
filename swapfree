@@ -41,7 +41,14 @@ class Swapfree(nagiosplugin.Resource) :
               )
             for name, value, units in
                 (
-                    ("%avail", round(100 * meminfo["SwapFree"] / meminfo["SwapTotal"]), "%"),
+                    (
+                        "%avail",
+                        (
+                            lambda : 100,
+                            lambda : round(100 * meminfo["SwapFree"] / meminfo["SwapTotal"]),
+                        )[meminfo["SwapTotal"] != 0](),
+                        "%",
+                    ),
                     ("avail", meminfo["SwapFree"], "kB"),
                     ("total", meminfo["SwapTotal"], "kB"),
                 )
