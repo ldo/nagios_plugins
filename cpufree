@@ -1,0 +1,193 @@
+#!/usr/bin/python3
+#+
+# My third Nagios plugin -- check CPU usage.
+#-
+
+import os
+import time
+import argparse
+import apsw as sqlite
+import nagiosplugin
+
+#+
+# Common management of persistent data
+#-
+
+persistent_basedir = "/var/tmp/ldo_nagios"
+
+class PersistentStats :
+    "maintains an SQLite database in a common location that I can use" \
+    " for storing persistent counters in-between invocations of a plugin," \
+    " like this one, that reports incremental changes in those counters."
+
+    def __init__(self, prefix) :
+        os.makedirs(persistent_basedir, mode = 0o700, exist_ok = True)
+        self.conn = sqlite.Connection \
+          (
+            os.path.join(persistent_basedir, "stats.db"),
+            sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_READWRITE
+          )
+        cu = self.conn.cursor()
+        try :
+            cu.execute("select count(*) from vars")
+        except sqlite.SQLError :
+            inited = False
+        else :
+            inited = True
+        #end try
+        if not inited :
+            cu.execute \
+              (
+                "create table vars\n"
+                "  (\n"
+                "    name varchar primary key not null,\n"
+                "    value real not null,\n"
+                "    last_modified real not null /* seconds since 01-Jan-1970 00:00:00Z */\n"
+                "  )\n"
+              )
+        #end if
+        self.prefix = prefix
+    #end __init__
+
+    def get_and_update(self, newvals, now) :
+        result = {}
+        if len(newvals) != 0 :
+            names_to_keys = dict((n, "%s.%s" % (self.prefix, n)) for n in newvals)
+            keys_to_names = dict((names_to_keys[n], n) for n in newvals)
+            cu = self.conn.cursor()
+            rowiter = cu.execute \
+              (
+                    "select name, value, last_modified from vars where name in (%s)"
+                %
+                    ", ".join(sqlite.format_sql_value(k) for k in keys_to_names)
+              )
+            for n in newvals :
+                result[n] = (None, None, None, None)
+            #end for
+            for row in rowiter :
+                name = keys_to_names[row[0]]
+                result[name] = (row[1], row[2], newvals[name] - row[1], now - row[2])
+            #end for
+            cu.execute("begin transaction")
+            for name, value in newvals.items() :
+                cu.execute \
+                  (
+                    "insert or replace into vars(name, value, last_modified) values (?, ?, ?)",
+                    (names_to_keys[name], value, now)
+                  )
+            #end for
+            cu.execute("end transaction")
+        #end if
+        return \
+            result
+    #end get_and_update
+
+#end PersistentStats
+
+#+
+# Plugin-specific
+#-
+
+def load_cpuinfo() :
+    result = None
+    nr_cpus = 0
+    for line in open("/proc/stat", "r") :
+        items = line.strip().split()
+        if len(items) > 1 :
+            if items[0] == "cpu" : # total of all CPUs
+                tick = float(os.sysconf("SC_CLK_TCK"))
+                keys = ("user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal", "guest", "guest_nice")[:len(items)]
+                result = dict((key, float(item) / tick) for key, item in zip(keys, items[1:len(keys) - 1]))
+            elif items[0].startswith("cpu") :
+                nr_cpus += 1
+            #end if
+        #end if
+    #end for
+    if result == None :
+        raise RuntimeError("no cpu line found in /proc/stat")
+    #end if
+    if nr_cpus == 0 :
+        raise RuntimeError("no cpu«n» lines found in /proc/stat!?")
+    #end if
+    for k in result :
+        result[k] /= nr_cpus
+    #end for
+    return \
+        result
+#end load_cpuinfo
+
+class Cpufree(nagiosplugin.Resource) :
+
+    def __init__(self) :
+        self.stats = PersistentStats("cpu")
+    #end __init__
+
+    def probe(self) :
+        now = time.time()
+        cpuinfo = load_cpuinfo()
+        counters = self.stats.get_and_update(cpuinfo, now)
+        idle = counters["idle"]
+        if idle[2] != None and idle[3] != 0 and idle[3] != None :
+            fraction_idle = idle[2] / idle[3]
+        else :
+            fraction_idle = 1
+        #end if
+        metrics = \
+          [
+            nagiosplugin.Metric
+              (
+                name = "%idle",
+                value = round(fraction_idle * 100),
+                uom = "%"
+              )
+          ]
+        return \
+            metrics
+    #end probe
+
+#end Cpufree
+
+def main() :
+    parser = argparse.ArgumentParser(description = "check CPU usage")
+    for shortopt, longopt, kwargs in \
+        (
+            (
+                "-w", "--warning",
+                {
+                    "metavar" : "RANGE",
+                    "default" : 5,
+                    "help" : "warn if percentage of idle CPU falls below this",
+                },
+            ),
+            (
+                "-c", "--critical",
+                {
+                    "metavar" : "RANGE",
+                    "default" : 1,
+                    "help" : "critical if percentage of idle CPU falls below this",
+                },
+            ),
+            (
+                "-v", "--verbose",
+                {
+                    "action" : "count",
+                    "default" : 0,
+                    "help" : "increase output verbosity",
+                },
+            ),
+        ) \
+    :
+        parser.add_argument(shortopt, longopt, **kwargs)
+    #end for
+    args = parser.parse_args()
+    nagiosplugin.Check \
+      (
+        Cpufree(),
+        nagiosplugin.ScalarContext("%idle", "@%d" % int(args.warning), "@%d" % int(args.critical)),
+        nagiosplugin.Summary()
+      ).main(verbose = args.verbose)
+#end main
+
+if __name__ == "__main__" :
+    main()
+#end if
