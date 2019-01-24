@@ -50,6 +50,11 @@ class PersistentStats :
     #end __init__
 
     def get_and_update(self, newvals, now) :
+        "given newvals, a dictionary of new name-value pairs, updates those values" \
+        " in the database after creating a dictionary for returning 4-tuples containing" \
+        " their previous values and update times (None if not previously present) along" \
+        " with changes in those values and times. now is the current time to be stored" \
+        " with the updated values."
         result = {}
         if len(newvals) != 0 :
             names_to_keys = dict((n, "%s.%s" % (self.prefix, n)) for n in newvals)
