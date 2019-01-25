@@ -47,6 +47,7 @@ class PersistentStats :
               )
         #end if
         self.prefix = prefix
+        self.startup_time = time.time() - float(open("/proc/uptime", "r").read().strip().split()[0])
     #end __init__
 
     def get_and_update(self, newvals, now) :
@@ -70,8 +71,11 @@ class PersistentStats :
                 result[n] = (None, None, None, None)
             #end for
             for row in rowiter :
-                name = keys_to_names[row[0]]
-                result[name] = (row[1], row[2], newvals[name] - row[1], now - row[2])
+                # ignore entries older than last reboot
+                if row[2] >= self.startup_time :
+                    name = keys_to_names[row[0]]
+                    result[name] = (row[1], row[2], newvals[name] - row[1], now - row[2])
+                #end if
             #end for
             cu.execute("begin transaction")
             for name, value in newvals.items() :
