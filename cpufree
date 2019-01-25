@@ -13,10 +13,6 @@ import nagiosplugin
 from ldo_nagios_useful import \
     PersistentStats
 
-#+
-# Plugin-specific
-#-
-
 def load_cpuinfo() :
     result = None
     nr_cpus = 0
