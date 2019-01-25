@@ -30,6 +30,7 @@ class PersistentStats :
             sqlite.SQLITE_OPEN_CREATE | sqlite.SQLITE_OPEN_READWRITE
           )
         cu = self.conn.cursor()
+        cu.execute("begin transaction")
         try :
             cu.execute("select count(*) from vars")
         except sqlite.SQLError :
@@ -48,6 +49,7 @@ class PersistentStats :
                 "  )\n"
               )
         #end if
+        cu.execute("end transaction")
         self.prefix = prefix
         self.startup_time = time.time() - float(open("/proc/uptime", "r").read().strip().split()[0])
     #end __init__
@@ -63,6 +65,7 @@ class PersistentStats :
             names_to_keys = dict((n, "%s.%s" % (self.prefix, n)) for n in newvals)
             keys_to_names = dict((names_to_keys[n], n) for n in newvals)
             cu = self.conn.cursor()
+            cu.execute("begin transaction")
             rowiter = cu.execute \
               (
                     "select name, value, last_modified from vars where name in (%s)"
@@ -79,7 +82,6 @@ class PersistentStats :
                     result[name] = (row[1], row[2], newvals[name] - row[1], now - row[2])
                 #end if
             #end for
-            cu.execute("begin transaction")
             for name, value in newvals.items() :
                 cu.execute \
                   (
