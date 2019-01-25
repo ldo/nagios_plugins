@@ -19,8 +19,8 @@ persistent_basedir = os.path.join(os.path.expanduser("~nagios"), "ldo_nagios")
 
 class PersistentStats :
     "maintains an SQLite database in a common location that I can use" \
-    " for storing persistent counters in-between invocations of a plugin," \
-    " like this one, that reports incremental changes in those counters."
+    " for storing persistent counters in-between invocations of a plugin" \
+    " that reports incremental changes in those counters."
 
     def __init__(self, prefix) :
         os.makedirs(persistent_basedir, mode = 0o700, exist_ok = True)
