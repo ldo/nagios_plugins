@@ -13,7 +13,8 @@ import nagiosplugin
 # Common management of persistent data
 #-
 
-persistent_basedir = "/var/tmp/ldo_nagios"
+persistent_basedir = os.path.join(os.path.expanduser("~nagios"), "ldo_nagios")
+  # nagios user has a valid $HOME, might as well use it
 
 class PersistentStats :
     "maintains an SQLite database in a common location that I can use" \
