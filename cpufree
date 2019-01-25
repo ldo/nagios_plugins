@@ -14,7 +14,8 @@ import nagiosplugin
 #-
 
 persistent_basedir = os.path.join(os.path.expanduser("~nagios"), "ldo_nagios")
-  # nagios user has a valid $HOME, might as well use it
+  # nagios user has a valid home dir, might as well use it
+  # (Even though nagios server does not define $HOME)
 
 class PersistentStats :
     "maintains an SQLite database in a common location that I can use" \
