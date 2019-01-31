@@ -1,0 +1,304 @@
+#!/usr/bin/python3
+#+
+# This Nagios plugin monitors the output of a given command,
+# looking for changes in a specified numeric item, giving
+# alerts if the rate of change is too high or too low.
+#-
+
+import enum
+import collections
+import time
+import subprocess
+import re
+import getopt
+import argparse
+import nagiosplugin
+from ldo_nagios_useful import \
+    PersistentStats
+
+#+
+# Useful stuff
+#-
+
+@enum.unique
+class LIMIT(enum.Enum) :
+    MAX = "max"
+    MIN = "min"
+
+    def val_ok(self, val, limit) :
+        return \
+            {
+                LIMIT.MAX : lambda : val <= limit,
+                LIMIT.MIN : lambda : val >= limit,
+            }[self]()
+    #end val_ok
+
+    @classmethod
+    def valid_values(celf) :
+        return set(sorted(v.value for v in celf.__members__.values()))
+    #end valid_values
+
+#end LIMIT
+
+def natural(i) :
+    result = int(i)
+    if result <= 0 :
+        raise ValueError("not a positive integer: %s" % repr(i))
+    #end if
+    return \
+        result
+#end natural
+
+def limit_sym(s) :
+    if s in LIMIT.valid_values() :
+        result = LIMIT(s)
+    else :
+        raise ValueError \
+          (
+                "not a recognized limit type (%s) -- %s"
+            %
+                (", ".join(m for m in sorted(LIMIT.valid_values())), repr(s))
+          )
+    #end if
+    return \
+        result
+#end limit_sym
+
+# long prefixes not actually used currently
+decimal_prefixes = \
+    { # source : <http://en.wikipedia.org/wiki/Decimal_prefix>
+        3 : {"short" : "k", "long" : "kilo"},
+        -3 : {"short" : "m", "long" : "milli"},
+        6 : {"short" : "M", "long" : "mega"},
+        -6 : {"short" : "µ", "long" : "micro"},
+        9 : {"short" : "G", "long" : "giga"},
+        -9 : {"short" : "n", "long" : "nano"},
+        12 : {"short" : "T", "long" : "tera"},
+        -12 : {"short" : "p", "long" : "pico"},
+        15 : {"short" : "P", "long" : "peta"},
+        -15 : {"short" : "f", "long" : "femto"},
+        18 : {"short" : "E", "long" : "exa"},
+        -18 : {"short" : "a", "long" : "atto"},
+        # can't be bothered including any more for now
+    }
+binary_prefixes = \
+    { # source : <http://en.wikipedia.org/wiki/Binary_prefix>
+      # note no negative exponents have been defined here
+        1 : {"short" : "ki", "long" : "kibi"},
+        2 : {"short" : "Mi", "long" : "mebi"},
+        3 : {"short" : "Gi", "long" : "gibi"},
+        4 : {"short" : "Ti", "long" : "tebi"},
+        5 : {"short" : "Pi", "long" : "pebi"},
+        6 : {"short" : "Ei", "long" : "exbi"},
+        7 : {"short" : "Zi", "long" : "zebi"},
+        8 : {"short" : "Yi", "long" : "yobi"},
+    }
+
+thousands_sep = "_"
+group_thousands = True
+
+def sep_thousands(valuestr) :
+    "splits the digits in valuestr into groups of 3 separated by thousands_sep."
+    fractstart = valuestr.find(".")
+    if fractstart >= 0 :
+        inintpart = valuestr[0:fractstart]
+        infractpart = valuestr[fractstart + 1:]
+    else :
+        inintpart = valuestr
+        infractpart = None
+    #end if
+    outintpart = ""
+    outfractpart = ""
+    while True :
+        if len(outintpart) != 0 and len(inintpart) != 0 :
+            outintpart = thousands_sep + outintpart
+        #end if
+        outintpart = inintpart[-3:] + outintpart
+        inintpart = inintpart[:-3]
+        if len(inintpart) == 0 :
+            break
+    #end while
+    if infractpart != None :
+        while True :
+            if len(outfractpart) != 0 and len(infractpart) != 0 :
+                outfractpart += thousands_sep
+            #end if
+            outfractpart += infractpart[:3]
+            infractpart = infractpart[3:]
+            if len(infractpart) == 0 :
+                break
+        #end while
+    #end if
+    valuestr = outintpart + ("", "." + outfractpart)[infractpart != None]
+    return \
+        valuestr
+#end sep_thousands
+
+numpat = re.compile(r"(?:^|\W)([\+\-]?[0-9]+(?:\.?[0-9]*))")
+
+class RangeCheck :
+
+    def __init__(self, limit, limit_how) :
+        self.limit = limit
+        self.limit_how = limit_how
+    #end __new__
+
+    def match(self, value) :
+        return \
+            self.limit_how.val_ok(value, self.limit)
+    #end match
+
+    def __repr__(self) :
+        return \
+            (
+                "RangeCheck(%s %.3g)"
+            %
+                ({LIMIT.MAX : "<=", LIMIT.MIN : ">="}[self.limit_how], self.limit)
+            )
+    #end __repr__
+
+    @property
+    def violation(self) :
+        return \
+            "outside range %s" % repr(self)
+    #end self
+
+#end RangeCheck
+
+class Deltamon(nagiosplugin.Resource) :
+
+    def __init__(self, cmd, linenr, itemnr) :
+        self.stats = PersistentStats("deltamon/" + cmd)
+        self.cmd = cmd
+        self.linenr = linenr
+        self.itemnr = itemnr
+    #end __init__
+
+    def probe(self) :
+        now = time.time()
+        data = subprocess.check_output \
+          (
+            args = self.cmd,
+            close_fds = False,
+            shell = True,
+          )
+        data = data.decode("utf-8")
+        data = data.split("\n")
+        values = {} # to begin with
+        key = "(%d, %d)" % (self.linenr, self.itemnr)
+        if self.linenr <= len(data) :
+            line = data[self.linenr - 1]
+            items = tuple(m.group(1) for m in numpat.finditer(line))
+            if self.itemnr <= len(items) :
+    	        values[key] = float(items[self.itemnr - 1])
+            #end if
+        #end if
+        values = self.stats.get_and_update(values, now)
+        value = values[key]
+        metrics = \
+          [
+            nagiosplugin.Metric
+              (
+                name = "value",
+                value = (lambda : 0, lambda : value[2] / value[3])[value[0] != None](),
+                uom = ""
+              )
+          ]
+        return \
+            metrics
+    #end probe
+
+#end Deltamon
+
+def main() :
+    parser = argparse.ArgumentParser(description = "deltamon")
+    for shortopt, longopt, kwargs in \
+        (
+            (
+                "-w", "--warning",
+                {
+                    "metavar" : "LIMIT",
+                    "type" : float,
+                    "help" : "warn if rate of change is above/below this",
+                },
+            ),
+            (
+                "-c", "--critical",
+                {
+                    "metavar" : "LIMIT",
+                    "type" : float,
+                    "help" : "critical if rate of change is above/below this",
+                },
+            ),
+            (
+                None, "--limit",
+                {
+                    "metavar" : "HOW",
+                    "type" : limit_sym,
+                    "help" :
+                        "“max” or “min” indicating how to interpret the limit values",
+                },
+            ),
+            (
+                "-v", "--verbose",
+                {
+                    "action" : "count",
+                    "default" : 0,
+                    "help" : "increase output verbosity",
+                },
+            ),
+            (
+                "-x", "--command",
+                {
+                    "help" : "the command to be executed",
+                },
+            ),
+            (
+                "-l", "--line",
+                {
+                    "type" : natural,
+                    "help" :
+                        "the line number on which the desired numeric item will appear",
+                },
+            ),
+            (
+                "-i", "--item",
+                {
+                    "type" : natural,
+                    "help" :
+                        "the index (counting from 1) of the desired"
+                        " numeric item on the line",
+                },
+            ),
+            (
+                None, "--label",
+                {
+                    "help" : "the descriptive label for the numeric item",
+                },
+            ),
+        ) \
+    :
+        if shortopt != None :
+            parser.add_argument(shortopt, longopt, **kwargs)
+        else :
+            parser.add_argument(longopt, **kwargs)
+        #end if
+    #end for
+    args = parser.parse_args()
+    if args.command == None or args.line == None or args.item == None or args.limit == None or args.label == None :
+        raise getopt.GetoptError("missing --command, --line, --item, --limit or --label")
+    #end if
+    value_context = nagiosplugin.ScalarContext("value", args.warning, args.critical)
+    value_context.warning = RangeCheck(args.warning, args.limit)
+    value_context.critical = RangeCheck(args.critical, args.limit)
+    nagiosplugin.Check \
+      (
+        Deltamon(args.command, args.line, args.item),
+        value_context,
+        nagiosplugin.Summary()
+      ).main(verbose = args.verbose)
+#end main
+
+if __name__ == "__main__" :
+    main()
+#end if
