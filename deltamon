@@ -134,9 +134,12 @@ def sep_thousands(valuestr) :
         valuestr
 #end sep_thousands
 
+# TODO: make some use of above
+
 numpat = re.compile(r"(?:^|\W)([\+\-]?[0-9]+(?:\.?[0-9]*))")
 
 class RangeCheck :
+    "because I cannot get the effect I want with nagiosplugin.Range."
 
     def __init__(self, limit, limit_how) :
         self.limit = limit
