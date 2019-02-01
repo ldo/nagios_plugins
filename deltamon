@@ -98,12 +98,17 @@ class RangeCheck :
 
 class Deltamon(nagiosplugin.Resource) :
 
-    def __init__(self, label, cmd, linenr, itemnr) :
+    def __init__(self, label, cmd, linenr, itemnr, units) :
         self.stats = PersistentStats("deltamon/" + cmd)
         self.label = label
         self.cmd = cmd
         self.linenr = linenr
         self.itemnr = itemnr
+        if units != None :
+            self.units = units
+        else :
+            self.units = ""
+        #end if
     #end __init__
 
     def probe(self) :
@@ -133,7 +138,7 @@ class Deltamon(nagiosplugin.Resource) :
               (
                 name = self.label,
                 value = (lambda : 0, lambda : value[2] / value[3])[value[0] != None](),
-                uom = ""
+                uom = self.units
               )
           ]
         return \
@@ -208,6 +213,12 @@ def main() :
                     "help" : "the descriptive label for the numeric item",
                 },
             ),
+            (
+                None, "--units",
+                {
+                    "help" : "the units of measure for the numeric item",
+                },
+            ),
         ) \
     :
         if shortopt != None :
@@ -225,7 +236,7 @@ def main() :
     value_context.critical = RangeCheck(args.critical, args.limit)
     nagiosplugin.Check \
       (
-        Deltamon(args.label, args.command, args.line, args.item),
+        Deltamon(args.label, args.command, args.line, args.item, args.units),
         value_context,
         nagiosplugin.Summary()
       ).main(verbose = args.verbose)
