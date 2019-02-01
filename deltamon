@@ -98,8 +98,9 @@ class RangeCheck :
 
 class Deltamon(nagiosplugin.Resource) :
 
-    def __init__(self, cmd, linenr, itemnr) :
+    def __init__(self, label, cmd, linenr, itemnr) :
         self.stats = PersistentStats("deltamon/" + cmd)
+        self.label = label
         self.cmd = cmd
         self.linenr = linenr
         self.itemnr = itemnr
@@ -130,7 +131,7 @@ class Deltamon(nagiosplugin.Resource) :
           [
             nagiosplugin.Metric
               (
-                name = "value",
+                name = self.label,
                 value = (lambda : 0, lambda : value[2] / value[3])[value[0] != None](),
                 uom = ""
               )
@@ -219,12 +220,12 @@ def main() :
     if args.command == None or args.line == None or args.item == None or args.limit == None or args.label == None :
         raise getopt.GetoptError("missing --command, --line, --item, --limit or --label")
     #end if
-    value_context = nagiosplugin.ScalarContext("value", args.warning, args.critical)
+    value_context = nagiosplugin.ScalarContext(args.label, args.warning, args.critical)
     value_context.warning = RangeCheck(args.warning, args.limit)
     value_context.critical = RangeCheck(args.critical, args.limit)
     nagiosplugin.Check \
       (
-        Deltamon(args.command, args.line, args.item),
+        Deltamon(args.label, args.command, args.line, args.item),
         value_context,
         nagiosplugin.Summary()
       ).main(verbose = args.verbose)
