@@ -1,8 +1,11 @@
 #!/usr/bin/python3
 #+
-# This Nagios plugin monitors the output of a given command,
-# looking for changes in a specified numeric item, giving
-# alerts if the rate of change is too high or too low.
+# This Nagios plugin monitors the output of a given arbitrary command,
+# looking for changes in a specified numeric item, giving alerts if
+# the rate of change is too high or too low.
+#
+# Copyright 2019 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
 #-
 
 import enum
