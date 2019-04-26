@@ -1,0 +1,15 @@
+These plugins were written as part of my attempts to understand Nagios.
+They add functionality that, as far as I can tell, Nagios itself does
+not provide. This includes any mechanism for maintaining persistent
+state between plugin invocations, so that, for example, they can report
+on the rate of change of various statistical counters, like CPU usage,
+disk and network I/O, and the like. So I implemented my own mechanism
+for doing this.
+
+They use the python3-nagiosplugin convenience wrapper
+<https://packages.debian.org/stretch/python3-nagiosplugin> for
+interfacing to Nagios.
+
+Lawrence D'Oliveiro <ldo@geek-central.gen.nz>
+2019 April 26
+
