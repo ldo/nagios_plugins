@@ -1,5 +1,8 @@
 #+
-# Useful definitions across my Nagios plugins.
+# Useful definitions across my Nagios plugins. Currently
+# this just includes maintenance of persistent state, so plugins
+# can report rates of change in selected counters. I’m surprised
+# that Nagios itself makes no provision for such a thing.
 #
 # Copyright 2019 Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
 # Licensed under CC-BY <https://creativecommons.org/licenses/by/4.0/>.
